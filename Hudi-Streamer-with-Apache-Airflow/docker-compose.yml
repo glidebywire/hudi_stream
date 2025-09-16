@@ -39,6 +39,7 @@ services:
       - ./jars:/opt/spark/extra-jars
     environment:
       - TZ=UTC
+      - SPARK_MASTER_HOST=spark
     networks:
       big-data-net:
 
@@ -58,8 +59,8 @@ services:
       - ./jars:/opt/spark/extra-jars
     environment:
       - TZ=UTC
-      - SPARK_WORKER_CORES=1
-      - SPARK_WORKER_MEMORY=1g
+      - SPARK_WORKER_CORES=2
+      - SPARK_WORKER_MEMORY=2g
     networks:
       big-data-net:
   
