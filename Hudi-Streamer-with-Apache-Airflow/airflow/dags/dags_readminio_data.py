@@ -1,20 +1,25 @@
 import datetime
 from airflow.sdk import DAG
-from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
+from airflow.operators.bash import BashOperator
 
 with DAG(
   dag_id="minio_read_test",
   start_date=datetime.datetime(2025, 7, 14),
   schedule="@once",
+  catchup=False
 ):
-  SparkSubmitOperator(
+  BashOperator(
     task_id="minio_read_test_task",
-    application="jobs/jobs_readminio.py",
-    conn_id="spark_default",
-    packages="org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sdk-bundle:1.12.262,org.apache.hudi:hudi-spark3-bundle_2.12:0.15.0,org.apache.hive:hive-jdbc:3.1.2",
-    exclude_packages="log4j:log4j,org.slf4j:slf4j-log4j12,org.slf4j:slf4j-api,org.apache.logging.log4j:log4j-slf4j-impl",
-    
-    verbose=True
-  )
+    bash_command="""
+spark-submit \
+  --master spark://spark:7077 \
+  --deploy-mode client \
+  --verbose \
+  --jars /opt/spark/extra-jars/hudi-spark3.5-bundle_2.12-1.0.2.jar,/opt/spark/extra-jars/hadoop-aws-3.3.4.jar,/opt/spark/extra-jars/aws-java-sdk-bundle-1.12.367.jar \
+  --conf spark.hadoop.fs.s3a.clock.skew.adjust.enable=false \
+  --conf 'spark.driver.extraJavaOptions=-Dcom.amazonaws.sdk.disableClockSkewAdjustment=true -Duser.timezone=UTC' \
+  --conf 'spark.executor.extraJavaOptions=-Dcom.amazonaws.sdk.disableClockSkewAdjustment=true -Duser.timezone=UTC' \
+  /opt/airflow/jobs/jobs_readminio.py
+""")
 
 # Note: The connection ID (conn_id) used in this DAG must be created through the Airflow interface under Admin > Connections.

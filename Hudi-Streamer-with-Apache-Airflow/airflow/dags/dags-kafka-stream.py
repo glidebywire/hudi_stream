@@ -14,18 +14,18 @@ with DAG(
 ) as dag:
     ingest_task = SparkSubmitOperator(  
         task_id="deltastreamer_kuponku_redeem_task",
-        application=PATH_TO_HUDI_UTILITIES_BUNDLE_JAR, 
+        deploy_mode='cluster',
+        application='/opt/spark/extra-jars/hudi-spark3.5-bundle_2.12-1.0.2.jar',
         conn_id="spark_default",
         java_class="org.apache.hudi.utilities.streamer.HoodieStreamer",
-        packages=(
-                    'org.apache.hudi:hudi-spark3.5-bundle_2.12:1.0.2,'
-                    'org.apache.hadoop:hadoop-aws:3.3.4,'
-                    'com.amazonaws:aws-java-sdk-bundle:1.12.262,'
-                    'org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.6'
-                ),
-        exclude_packages='org.apache.avro:avro',
         conf={
+            'spark.master': 'spark://spark:7077',
+            'spark.jars.packages': 'org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sk-bundle:1.12.367,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.6',
+            # proxy setting
+            'spark.driver.extraJavaOptions': '-Dhttp.proxyHost=10.31.255.65 -Dhttp.proxyPort=8080 -Dhttps.proxyHost=10.31.255.65 -Dhttps.proxyPort=8080 -Duser.timezone=UTC',
+            'spark.executor.extraJavaOptions': '-Dhttp.proxyHost=10.31.255.65 -Dhttp.proxyPort=8080 -Dhttps.proxyHost=10.31.255.65 -Dhttps.proxyPort=8080 -Duser.timezone=UTC',
             'spark.hadoop.fs.s3a.access.key': 'minioadmin',
+
             'spark.hadoop.fs.s3a.secret.key': 'minioadmin',
             'spark.hadoop.fs.s3a.endpoint': 'http://minio:9000',
             'spark.hadoop.fs.s3a.path.style.access': 'true',
@@ -35,6 +35,7 @@ with DAG(
             'spark.sql.catalog.spark_catalog': 'org.apache.spark.sql.hudi.catalog.HoodieCatalog',
             'spark.hadoop.hive.metastore.uris': 'thrift://hive-metastore:9083',
             'spark.sql.hive.convertMetastoreParquet': 'false',
+            'spark.hadoop.fs.s3a.clock.skew.adjust.enable': 'false',
             'spark.executor.cores': '1',
             'spark.cores.max': '1'
         },
