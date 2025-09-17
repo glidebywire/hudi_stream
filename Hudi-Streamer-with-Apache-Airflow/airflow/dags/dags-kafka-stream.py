@@ -20,7 +20,7 @@ with DAG(
         java_class="org.apache.hudi.utilities.streamer.HoodieStreamer",
         conf={
             'spark.master': 'spark://spark:7077',
-            'spark.jars.packages': 'org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sk-bundle:1.12.367,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.6',
+            'spark.jars.packages': 'org.apache.hadoop:hadoop-aws:3.3.4,com.amazonaws:aws-java-sk-bundle:1.12.262,org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.6',
             # proxy setting
             'spark.driver.extraJavaOptions': '-Dhttp.proxyHost=10.31.255.65 -Dhttp.proxyPort=8080 -Dhttps.proxyHost=10.31.255.65 -Dhttps.proxyPort=8080 -Duser.timezone=UTC',
             'spark.executor.extraJavaOptions': '-Dhttp.proxyHost=10.31.255.65 -Dhttp.proxyPort=8080 -Dhttps.proxyHost=10.31.255.65 -Dhttps.proxyPort=8080 -Duser.timezone=UTC',
