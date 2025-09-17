@@ -1,9 +1,11 @@
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, from_unixtime, to_date
-from pyspark.sql.types import StructType, StructField, StringType, MapType, LongType
+from pyspark.sql.types import StructType, StructField, StringType, LongType
 import json
 import os
 from datetime import datetime
+import time
+from pyspark.errors.exceptions.captured import AnalysisException
 
 # -------------------- MinIO & Hudi Configurations --------------------
 MINIO_ENDPOINT = "http://minio:9000"
@@ -17,7 +19,6 @@ os.environ["AWS_JAVA_DISABLE_CLOCK_SKEW_ADJUST"] = "true"
 os.environ["AWS_REGION"] = "us-east-1"
 
 # -------------------- Spark Session --------------------
-# -------------------- Spark Session --------------------
 spark = SparkSession.builder \
     .appName("Hudi Write-Then-Read") \
     .config("spark.sql.extensions", "org.apache.spark.sql.hudi.HoodieSparkSessionExtension") \
@@ -28,15 +29,9 @@ spark = SparkSession.builder \
     .config("spark.hadoop.fs.s3a.access.key", MINIO_ACCESS_KEY) \
     .config("spark.hadoop.fs.s3a.secret.key", MINIO_SECRET_KEY) \
     .config("spark.hadoop.fs.s3a.path.style.access", "true") \
+    .config("spark.hadoop.hive.metastore.uris", "thrift://hive-metastore:9083") \
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .config("spark.hadoop.fs.s3a.clock.skew.adjust", "false") \
-    .config("spark.hadoop.fs.s3a.connection.establish.timeout", "50000") \
-    .config("spark.hadoop.fs.s3a.connection.timeout", "50000") \
-    .config("spark.hadoop.fs.s3a.xml.disallow.doctype.decl", "false") \
-    .config("spark.hadoop.fs.s3a.impl.disable.cache", "true") \
-    .config("spark.hadoop.fs.s3a.committer.name", "magic") \
-    .config("spark.hadoop.mapreduce.fileoutputcommitter.algorithm.version", "2") \
-    .config("spark.speculation", "false") \
+    .enableHiveSupport() \
     .getOrCreate()
 
 # -------------------- 1. Dummy Data --------------------
@@ -47,9 +42,8 @@ dummy_raw_data = [
      int(datetime(2025, 8, 21, 11, 30, 0).timestamp() * 1000)),
     (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a6"}, "couponCode": "CPN003", "status": "released"}),
      int(datetime(2025, 8, 22, 14, 15, 0).timestamp() * 1000)),
-    # This is an update, so the operation should be 'upsert' for incremental loads
     (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a4"}, "couponCode": "CPN001_UPDATED", "status": "cancelled"}),
-     int(datetime(2025, 8, 21, 12, 0, 0).timestamp() * 1000)), # removed the +1000 for clarity, precombine handles it
+     int(datetime(2025, 8, 21, 12, 0, 0).timestamp() * 1000)),
 ]
 
 raw_schema = StructType([
@@ -59,9 +53,7 @@ raw_schema = StructType([
 
 df_raw = spark.createDataFrame(dummy_raw_data, schema=raw_schema)
 
-# -------------------- 2. Transform for Hudi (Corrected) --------------------
-
-# Define the precise schema of the JSON data in the 'after' column
+# -------------------- 2. Transform for Hudi --------------------
 json_schema = StructType([
     StructField("_id", StructType([
         StructField("$oid", StringType(), True)
@@ -70,22 +62,20 @@ json_schema = StructType([
     StructField("status", StringType(), True)
 ])
 
-# Parse the JSON with the correct schema and flatten it
 df_parsed = df_raw.withColumn("parsed_after", from_json(col("after"), json_schema))
 
 df_hudi_prep = df_parsed.select(
-    col("parsed_after._id.$oid").alias("oid"), # This is our record key
+    col("parsed_after._id.$oid").alias("oid"),
     col("parsed_after.couponCode"),
     col("parsed_after.status"),
-    col("ts_ms"), # This is our precombine key
-    to_date(from_unixtime(col("ts_ms") / 1000)).alias("ts_date") # This is our partition path
+    col("ts_ms"),
+    to_date(from_unixtime(col("ts_ms") / 1000)).alias("ts_date")
 )
 
 print("Correctly Prepared DataFrame for Hudi:")
 df_hudi_prep.printSchema()
 df_hudi_prep.show(truncate=False)
 
-# -------------------- 3. Hudi Write Options --------------------
 # -------------------- 3. Hudi Write Options --------------------
 hudi_options = {
     'hoodie.table.name': HUDI_TABLE_NAME,
@@ -107,7 +97,7 @@ hudi_options = {
     'hoodie.datasource.hive_sync.database': 'default',
     'hoodie.datasource.hive_sync.table': HUDI_TABLE_NAME,
     'hoodie.datasource.hive_sync.partition_fields': 'ts_date',
-    'hoodie.datasource.hive_sync.partition_extractor_class': 'org.apache.hudi.hive.MultiPartKeysValueExtractor'
+    'hoodie.datasource.hive_sync.partition_extractor_class': 'org.apache.hudi.hive.MultiPartKeysValueExtractor',
 }
 
 # -------------------- 5. Write to Hudi --------------------
@@ -121,17 +111,13 @@ df_hudi_prep.write.format("hudi") \
 print("Write completed!")
 
 # -------------------- 6. Refresh Hive and Verify --------------------
-# A direct read from the path is sufficient for verification
 print("Reading back Hudi table data for verification...")
 hudi_df = spark.read.format("hudi").load(HUDI_TABLE_PATH)
 hudi_df.show()
 
-import time
-from pyspark.errors.exceptions.captured import AnalysisException
-
-# If Hive sync is enabled, you can also query via Spark SQL
 print("Reading from Hive table...")
 
+# Loop with retries is no longer strictly necessary with enableHiveSupport, but it's good practice
 for i in range(5):
     try:
         spark.sql(f"REFRESH TABLE default.{HUDI_TABLE_NAME}")
