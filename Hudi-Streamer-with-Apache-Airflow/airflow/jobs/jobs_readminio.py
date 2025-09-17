@@ -86,6 +86,7 @@ df_hudi_prep.printSchema()
 df_hudi_prep.show(truncate=False)
 
 # -------------------- 3. Hudi Write Options --------------------
+# -------------------- 3. Hudi Write Options --------------------
 hudi_options = {
     'hoodie.table.name': HUDI_TABLE_NAME,
     'hoodie.datasource.write.recordkey.field': 'oid',
@@ -93,25 +94,21 @@ hudi_options = {
     'hoodie.datasource.write.precombine.field': 'ts_ms',
     'hoodie.datasource.write.table.name': HUDI_TABLE_NAME,
     'hoodie.datasource.write.table.type': 'COPY_ON_WRITE',
-    # --- BEST PRACTICE: Use 'upsert' for data with updates ---
     'hoodie.datasource.write.operation': 'upsert',
     'hoodie.cleaner.policy': 'KEEP_LATEST_COMMITS',
     'hoodie.cleaner.commits.retained': 3,
-    # --- BEST PRACTICE: Enable metadata for better performance on larger tables ---
     'hoodie.metadata.enable': 'false',
     'hoodie.consistency.check.enabled': 'true',
-    # Hive Sync
+    
+    # --- CORRECT HIVE SYNC CONFIGURATION ---
     'hoodie.datasource.hive_sync.enable': 'true',
+    'hoodie.datasource.hive_sync.mode': 'hms',
+    'hoodie.datasource.hive_sync.metastore.uris': 'thrift://hive-metastore:9083',
     'hoodie.datasource.hive_sync.database': 'default',
     'hoodie.datasource.hive_sync.table': HUDI_TABLE_NAME,
-    'hoodie.datasource.hive_sync.mode': 'jdbc',
-    'hoodie.datasource.hive_sync.jdbcurl': 'jdbc:postgresql://metastore-db:5432/metastore_db',
-    'hoodie.datasource.hive_sync.username': 'hive',
-    'hoodie.datasource.hive_sync.password': 'hive',
     'hoodie.datasource.hive_sync.partition_fields': 'ts_date',
     'hoodie.datasource.hive_sync.partition_extractor_class': 'org.apache.hudi.hive.MultiPartKeysValueExtractor'
 }
-
 
 # -------------------- 5. Write to Hudi --------------------
 spark.sql("CREATE DATABASE IF NOT EXISTS default")
