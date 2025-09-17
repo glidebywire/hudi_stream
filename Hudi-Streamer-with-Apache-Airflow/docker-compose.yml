@@ -119,24 +119,23 @@ services:
       DB_PORT: 5432
       DB_NAME: metastore_db
       DB_USER: hive
-      DB_PASSWORD: hive      
-      HIVE_CONF_datanucleus_connectionPoolingType: "DBCP"
-      HIVE_CONF_datanucleus_connectionRetryCount: "5"
+      DB_PASSWORD: hive
       HIVE_CONF_datanucleus_schema_autoCreateAll: "true"
       HIVE_CONF_datanucleus_fixedDatastore: "false"
+      HIVE_CONF_datanucleus_connectionPoolingType: "DBCP"
+      HIVE_CONF_datanucleus_connectionRetryCount: "5"
+
+      # Required so Hive loads JDBC + AWS S3 jars
       HIVE_AUX_JARS_PATH: /opt/hive/lib/*
+      # Point warehouse to MinIO (This is still useful)
       HIVE_CONF_hive_metastore_warehouse_dir: s3a://hudibuckettest/hive
-      HADOOP_CONF_fs_s3a_endpoint: http://minio:9000
-      HADOOP_CONF_fs_s3a_access_key: minioadmin
-      HADOOP_CONF_fs_s3a_secret_key: minioadmin
-      HADOOP_CONF_fs_s3a_path_style_access: "true"
 
     volumes:
-      # Hive configs
+      # This volume mount now provides the core-site.xml
       - ./hive-conf:/opt/hive/conf:ro
-      # Postgres JDBC driver (must exist locally in ./jars/)
+      
+      # Other volumes remain the same
       - ./jars/postgresql-42.7.7.jar:/opt/hive/lib/postgresql-42.7.7.jar:ro
-      # Hadoop AWS + AWS SDK bundles for S3A (download beforehand)
       - ./jars/hadoop-aws-3.3.4.jar:/opt/hive/lib/hadoop-aws-3.3.4.jar:ro
       - ./jars/aws-java-sdk-bundle-1.12.262.jar:/opt/hive/lib/aws-java-sdk-bundle-1.12.262.jar:ro
     networks:
