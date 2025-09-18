@@ -141,48 +141,56 @@ services:
       big-data-net:
 
   trino:
-    image: trinodb/trino:443
+    image: trinodb/trino:475
     container_name: trino
     ports:
       - "8087:8080"
+    user: root
     volumes:
       - ./trino/catalog:/etc/trino/catalog
       - ./trino/config:/etc/trino
+      - ./trino-data:/data   
     depends_on:
       - hive-metastore
     networks:
       big-data-net:
 
   superset:
-    build: 
-      context: ./superset
+    image: apache/superset:3.0.2  # <-- Use the official image directly
     container_name: superset
-    ports:
-      - "8088:8088"
-    environment:
-      # =========================================================
-      # USE POSTGRESQL INSTEAD OF SQLITE
-      # =========================================================
-      - SUPERSET_LOAD_EXAMPLES=no
-      - SUPERSET_SECRET_KEY=superset_secret
-      - DB_DRIVER=postgresql
-      - DB_HOST=metastore-db
-      - DB_PORT=5432
-      - DB_USER=superset
-      - DB_PASSWORD=superset
-      - DB_DATABASE=superset_db
     volumes:
-      - ./superset_data/superset_home:/app/superset_home
-    depends_on:
-      - trino
+      - ./superset_home:/app/superset_home
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py
+      - ./superset/requirements-local.txt:/app/requirements-local.txt # <-- Mount the requirements file
+    environment:
+      - DATABASE_DB=superset
+      - DATABASE_HOST=database
+      - DATABASE_PASSWORD=superset
+      - DATABASE_USER=superset
+      - DATABASE_PORT=5432
+      - SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py
+      - EXTRA_PIP_PACKAGES=psycopg2-binary # Alternative method for some versions
+    ports:
+      - '8089:8088'
     networks:
-      big-data-net:
-    command: >
-      /bin/bash -c "
-      superset db upgrade &&
-      superset fab create-admin --username admin --firstname Superset --lastname Admin --email admin@superset.com --password admin &&
-      superset init &&
-      superset run -h 0.0.0.0 -p 8088"
+      - big-data-net
+    depends_on:
+      - database # Add dependency to ensure database starts first
+  
+  database:
+    init: true
+    image: postgres:alpine
+    container_name: superset_db
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=superset
+      - POSTGRES_USER=superset
+      - POSTGRES_PASSWORD=superset  # <-- CORRECTED VALUE
+    ports:
+      - '5000:5432'
+    networks:
+      - big-data-net
 
 volumes:
   airflow_data:
