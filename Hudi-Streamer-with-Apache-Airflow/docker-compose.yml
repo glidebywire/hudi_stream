@@ -155,42 +155,23 @@ services:
     networks:
       big-data-net:
 
-  superset:
-    image: apache/superset:3.0.2  # <-- Use the official image directly
-    container_name: superset
-    volumes:
-      - ./superset_home:/app/superset_home
-      - ./superset/superset_config.py:/app/pythonpath/superset_config.py
-      - ./superset/requirements-local.txt:/app/requirements-local.txt # <-- Mount the requirements file
-    environment:
-      - DATABASE_DB=superset
-      - DATABASE_HOST=database
-      - DATABASE_PASSWORD=superset
-      - DATABASE_USER=superset
-      - DATABASE_PORT=5432
-      - SUPERSET_CONFIG_PATH=/app/pythonpath/superset_config.py
-      - EXTRA_PIP_PACKAGES=psycopg2-binary # Alternative method for some versions
+  jupyterlab:
+    build: ./jupyterlab
+    container_name: jupyterlab
     ports:
-      - '8089:8088'
+      - "8888:8888"
+    volumes:
+      - ./notebooks:/home/jovyan/work
     networks:
       - big-data-net
-    depends_on:
-      - database # Add dependency to ensure database starts first
-  
-  database:
-    init: true
-    image: postgres:alpine
-    container_name: superset_db
-    volumes:
-      - ./postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=superset
-      - POSTGRES_USER=superset
-      - POSTGRES_PASSWORD=superset  # <-- CORRECTED VALUE
-    ports:
-      - '5000:5432'
-    networks:
-      - big-data-net
+      - JUPYTER_ENABLE_LAB=yes
+      - JUPYTER_TOKEN=your-secure-password
+      - GRANT_SUDO=yes
+    user: root
+    command: >
+      bash -c "start-notebook.sh && 
+      jupyter-lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --NotebookApp.token='${JUPYTER_TOKEN}'"
 
 volumes:
   airflow_data:

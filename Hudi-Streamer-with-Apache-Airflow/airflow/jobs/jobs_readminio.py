@@ -1,6 +1,6 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import from_json, col, from_unixtime, to_date
-from pyspark.sql.types import StructType, StructField, StringType, LongType
+from pyspark.sql.functions import from_json, col, from_unixtime, to_date, rand
+from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType
 import json
 import os
 from datetime import datetime
@@ -12,7 +12,7 @@ MINIO_ENDPOINT = "http://minio:9000"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
 HUDI_BUCKET_NAME = "hudibuckettest"
-HUDI_TABLE_NAME = "coupons"
+HUDI_TABLE_NAME = "coupons_geo"
 HUDI_TABLE_PATH = f"s3a://{HUDI_BUCKET_NAME}/hive/{HUDI_TABLE_NAME}/"
 
 os.environ["AWS_JAVA_DISABLE_CLOCK_SKEW_ADJUST"] = "true"
@@ -20,7 +20,7 @@ os.environ["AWS_REGION"] = "us-east-1"
 
 # -------------------- Spark Session --------------------
 spark = SparkSession.builder \
-    .appName("Hudi Write-Then-Read") \
+    .appName("Hudi Geospatial Write") \
     .config("spark.sql.extensions", "org.apache.spark.sql.hudi.HoodieSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.hudi.catalog.HoodieCatalog") \
     .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
@@ -70,7 +70,9 @@ df_hudi_prep = df_parsed.select(
     col("parsed_after.status"),
     col("ts_ms"),
     to_date(from_unixtime(col("ts_ms") / 1000)).alias("ts_date")
-)
+).withColumn("latitude", (rand() * 180) - 90) \
+ .withColumn("longitude", (rand() * 360) - 180)
+
 
 print("Correctly Prepared DataFrame for Hudi:")
 df_hudi_prep.printSchema()
@@ -89,7 +91,7 @@ hudi_options = {
     'hoodie.cleaner.commits.retained': 3,
     'hoodie.metadata.enable': 'false',
     'hoodie.consistency.check.enabled': 'true',
-    
+
     # --- CORRECT HIVE SYNC CONFIGURATION ---
     'hoodie.datasource.hive_sync.enable': 'true',
     'hoodie.datasource.hive_sync.mode': 'hms',
@@ -121,7 +123,7 @@ print("Reading from Hive table...")
 for i in range(5):
     try:
         spark.sql(f"REFRESH TABLE default.{HUDI_TABLE_NAME}")
-        hive_df = spark.sql(f"SELECT oid, couponCode, status, ts_ms, ts_date FROM default.{HUDI_TABLE_NAME} ORDER BY oid, ts_ms")
+        hive_df = spark.sql(f"SELECT oid, couponCode, status, ts_ms, ts_date, latitude, longitude FROM default.{HUDI_TABLE_NAME} ORDER BY oid, ts_ms")
         hive_df.show()
         break
     except AnalysisException as e:

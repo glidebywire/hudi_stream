@@ -1,6 +1,8 @@
-ENABLE_PROXY_FIX = True
-SECRET_KEY = "MyVerySecretKey"
-PREVENT_UNSAFE_DB_CONNECTIONS = False
-TALISMAN_ENABLED = False
+FEATURE_FLAGS = {
+    "ENABLE_TEMPLATE_PROCESSING": True,
+}
 
-SQLALCHEMY_DATABASE_URI = "postgresql://superset:superset@database:5432/superset"
+ENABLE_PROXY_FIX = True
+SECRET_KEY = "YOUR_OWN_RANDOM_GENERATED_STRING"
+
+SQLALCHEMY_DATABASE_URI = "postgresql+psycopg2://superset:superset@database:5432/superset"
