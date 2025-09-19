@@ -31,6 +31,7 @@ spark = SparkSession.builder \
     .config("spark.hadoop.fs.s3a.path.style.access", "true") \
     .config("spark.hadoop.hive.metastore.uris", "thrift://hive-metastore:9083") \
     .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
+    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
     .enableHiveSupport() \
     .getOrCreate()
 
@@ -86,50 +87,41 @@ hudi_options = {
     'hoodie.datasource.write.precombine.field': 'ts_ms',
     'hoodie.datasource.write.table.name': HUDI_TABLE_NAME,
     'hoodie.datasource.write.table.type': 'COPY_ON_WRITE',
-    'hoodie.datasource.write.operation': 'upsert',
-    'hoodie.cleaner.policy': 'KEEP_LATEST_COMMITS',
-    'hoodie.cleaner.commits.retained': 3,
+    'hoodie.datasource.write.operation': 'bulk_insert',
+    'hoodie.datasource.hive_sync.enable': 'false', # Keep this off for the test
     'hoodie.metadata.enable': 'false',
     'hoodie.consistency.check.enabled': 'true',
-
-    # --- CORRECT HIVE SYNC CONFIGURATION ---
-    'hoodie.datasource.hive_sync.enable': 'true',
-    'hoodie.datasource.hive_sync.mode': 'hms',
-    'hoodie.datasource.hive_sync.metastore.uris': 'thrift://hive-metastore:9083',
-    'hoodie.datasource.hive_sync.database': 'default',
-    'hoodie.datasource.hive_sync.table': HUDI_TABLE_NAME,
-    'hoodie.datasource.hive_sync.partition_fields': 'ts_date',
-    'hoodie.datasource.hive_sync.partition_extractor_class': 'org.apache.hudi.hive.MultiPartKeysValueExtractor',
 }
 
 # -------------------- 5. Write to Hudi --------------------
-spark.sql("CREATE DATABASE IF NOT EXISTS default")
-print(f"Writing data to Hudi table '{HUDI_TABLE_NAME}' at '{HUDI_TABLE_PATH}'...")
+print(f"Attempting a simplified bulk_insert to Hudi table '{HUDI_TABLE_NAME}' at '{HUDI_TABLE_PATH}'...")
 df_hudi_prep.write.format("hudi") \
     .options(**hudi_options) \
-    .mode("overwrite") \
+    .mode("overwrite")  \
     .save(HUDI_TABLE_PATH)
 
-print("Write completed!")
-
-# -------------------- 6. Refresh Hive and Verify --------------------
-print("Reading back Hudi table data for verification...")
-hudi_df = spark.read.format("hudi").load(HUDI_TABLE_PATH)
-hudi_df.show()
-
-print("Reading from Hive table...")
-
-# Loop with retries is no longer strictly necessary with enableHiveSupport, but it's good practice
-for i in range(5):
-    try:
-        spark.sql(f"REFRESH TABLE default.{HUDI_TABLE_NAME}")
-        hive_df = spark.sql(f"SELECT oid, couponCode, status, ts_ms, ts_date, latitude, longitude FROM default.{HUDI_TABLE_NAME} ORDER BY oid, ts_ms")
-        hive_df.show()
-        break
-    except AnalysisException as e:
-        print(f"Attempt {i+1} failed: Table not found yet. Retrying in 10 seconds...")
-        time.sleep(10)
-        if i == 4:
-            raise e
-
+print("Simplified write completed!")
 spark.stop()
+# print("Write completed!")
+
+# # -------------------- 6. Refresh Hive and Verify --------------------
+# print("Reading back Hudi table data for verification...")
+# hudi_df = spark.read.format("hudi").load(HUDI_TABLE_PATH)
+# hudi_df.show()
+
+# print("Reading from Hive table...")
+
+# # Loop with retries is no longer strictly necessary with enableHiveSupport, but it's good practice
+# for i in range(5):
+#     try:
+#         spark.sql(f"REFRESH TABLE default.{HUDI_TABLE_NAME}")
+#         hive_df = spark.sql(f"SELECT oid, couponCode, status, ts_ms, ts_date, latitude, longitude FROM default.{HUDI_TABLE_NAME} ORDER BY oid, ts_ms")
+#         hive_df.show()
+#         break
+#     except AnalysisException as e:
+#         print(f"Attempt {i+1} failed: Table not found yet. Retrying in 10 seconds...")
+#         time.sleep(10)
+#         if i == 4:
+#             raise e
+
+# spark.stop()

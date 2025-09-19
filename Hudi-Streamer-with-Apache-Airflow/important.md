@@ -1,5 +1,13 @@
 # Essential commands
 
+## wget load those jars
+```
+ls -h
+aws-java-sdk-bundle-1.12.262.jar  hudi-spark3.5-bundle_2.12-1.0.2.jar  woodstox-core-5.4.0.jar
+hadoop-aws-3.3.4.jar              postgresql-42.7.7.jar
+hadoop-common-3.3.4.jar           stax2-api-4.2.1.jar
+```
+
 ## test metastore table init
 
 ```
@@ -18,6 +26,7 @@ FROM information_schema.tables
 WHERE table_schema = 'public'
 ORDER BY table_name;```
 ```
+
 on connection     Connection Name: Hive Metastore DB (or any name you like)
 
     Connection Method: Server and Port
