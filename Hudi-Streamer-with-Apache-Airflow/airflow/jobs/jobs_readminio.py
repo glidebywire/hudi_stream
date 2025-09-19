@@ -107,7 +107,7 @@ spark.sql("CREATE DATABASE IF NOT EXISTS default")
 print(f"Writing data to Hudi table '{HUDI_TABLE_NAME}' at '{HUDI_TABLE_PATH}'...")
 df_hudi_prep.write.format("hudi") \
     .options(**hudi_options) \
-    .mode("append") \
+    .mode("overwrite") \
     .save(HUDI_TABLE_PATH)
 
 print("Write completed!")

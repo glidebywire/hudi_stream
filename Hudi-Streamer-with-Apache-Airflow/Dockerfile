@@ -27,7 +27,15 @@ RUN echo '<ivysettings><settings proxies="nexus-proxy"/><proxies><proxy id="nexu
 
 # Set up more packages
 #RUN pip install --proxy=http://10.31.255.65:8080 --trusted-host="10.179.0.20" apache-airflow-providers-apache-spark==5.3.1 pyspark==3.5.6 boto3
-RUN pip install apache-airflow-providers-apache-spark==5.3.1 pyspark==3.5.6 boto3
+
+ENV HTTP_PROXY="http://10.31.255.65:8080"
+ENV HTTPS_PROXY="http://10.31.255.65:8080"
+ENV NO_PROXY="10.179.0.20,localhost,*.localhost,k3d_testme"
+
+RUN pip install \
+    --proxy=$HTTP_PROXY \
+    --trusted-host="10.179.0.20" \
+    apache-airflow-providers-apache-spark==5.3.1 pyspark==3.5.6 boto3
 
 # Add a custom airflow database file path
 RUN mkdir -p $AIRFLOW_HOME/data $AIRFLOW_HOME/cache

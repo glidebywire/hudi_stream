@@ -30,13 +30,12 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8080"]
     volumes:
       - ./airflow/jobs:/opt/airflow/jobs
-      # mount your pre-downloaded jars into a separate folder (do NOT overwrite /opt/spark/jars)
       - ./hive-conf:/opt/spark/conf
-      - ./jars:/opt/spark/extra-jars
+      # Corrected: Mount to a separate directory, NOT /opt/spark/jars
+      - ./jars:/opt/spark/external-jars
     environment:
       - TZ=UTC
       - SPARK_MASTER_HOST=spark
-      - SPARK_SUBMIT_ARGS=--conf spark.jars=/opt/spark/external-jars/hudi-spark3.5-bundle_2.12-1.0.2.jar,/opt/spark/external-jars/hadoop-aws-3.3.6.jar,/opt/spark/external-jars/hadoop-common-3.3.6.jar,/opt/spark/external-jars/woodstox-core-6.7.0.jar,/opt/spark/external-jars/stax2-api-4.2.2.jar,/opt/spark/external-jars/commons-configuration2-2.12.0.jar,/opt/spark/external-jars/aws-java-sdk-bundle-1.12.262.jar
     networks:
       big-data-net:
 
@@ -51,14 +50,13 @@ services:
       test: ["CMD", "curl", "-f", "http://localhost:8081"]
     volumes:
       - ./airflow/jobs:/opt/airflow/jobs
-      - ./jars:/opt/spark/external-jars:ro
+      # Corrected: Mount to a separate directory, NOT /opt/spark/jars
+      - ./jars:/opt/spark/external-jars
       - ./hive-conf:/opt/spark/conf
-      - ./jars:/opt/spark/extra-jars
     environment:
       - TZ=UTC
       - SPARK_WORKER_CORES=2
       - SPARK_WORKER_MEMORY=2g
-      - SPARK_SUBMIT_ARGS=--conf spark.jars=/opt/spark/external-jars/hudi-spark3.5-bundle_2.12-1.0.2.jar,/opt/spark/external-jars/hadoop-aws-3.3.6.jar,/opt/spark/external-jars/hadoop-common-3.3.6.jar,/opt/spark/external-jars/woodstox-core-6.7.0.jar,/opt/spark/external-jars/stax2-api-4.2.2.jar,/opt/spark/external-jars/commons-configuration2-2.12.0.jar,/opt/spark/external-jars/aws-java-sdk-bundle-1.12.262.jar
     networks:
       big-data-net:
   
