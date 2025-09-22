@@ -2,3 +2,5 @@
 volumes
 .venv
 trino-data
+postgres_data
+notebooks
