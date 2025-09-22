@@ -1,13 +1,15 @@
+#!/usr/bin/env python3
+# jobs_readminio_safe.py
+
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import from_json, col, from_unixtime, to_date, rand
-from pyspark.sql.types import StructType, StructField, StringType, LongType, DoubleType
+from pyspark.sql.types import StructType, StructField, StringType, LongType
+from datetime import datetime
 import json
 import os
-from datetime import datetime
-import time
-from pyspark.errors.exceptions.captured import AnalysisException
+import traceback
 
-# -------------------- MinIO & Hudi Configurations --------------------
+# -------------------- MinIO & Hudi Config --------------------
 MINIO_ENDPOINT = "http://minio:9000"
 MINIO_ACCESS_KEY = "minioadmin"
 MINIO_SECRET_KEY = "minioadmin"
@@ -20,31 +22,45 @@ os.environ["AWS_REGION"] = "us-east-1"
 
 # -------------------- Spark Session --------------------
 spark = SparkSession.builder \
-    .appName("Hudi Geospatial Write") \
+    .appName("Hudi Geospatial Write Safe") \
+    .master("local[2]")  \
+    .config("spark.driver.memory", "2g") \
+    .config("spark.executor.memory", "2g") \
+    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
     .config("spark.sql.extensions", "org.apache.spark.sql.hudi.HoodieSparkSessionExtension") \
     .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.hudi.catalog.HoodieCatalog") \
-    .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
     .config("spark.kryo.registrator", "org.apache.spark.HoodieSparkKryoRegistrar") \
-    .config("spark.hadoop.fs.s3a.endpoint", MINIO_ENDPOINT) \
-    .config("spark.hadoop.fs.s3a.access.key", MINIO_ACCESS_KEY) \
-    .config("spark.hadoop.fs.s3a.secret.key", MINIO_SECRET_KEY) \
-    .config("spark.hadoop.fs.s3a.path.style.access", "true") \
-    .config("spark.hadoop.hive.metastore.uris", "thrift://hive-metastore:9083") \
-    .config("spark.hadoop.fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem") \
-    .config("spark.hadoop.fs.s3a.connection.ssl.enabled", "false") \
+    .config("spark.speculation", "false") \
     .enableHiveSupport() \
     .getOrCreate()
 
-# -------------------- 1. Dummy Data --------------------
+# -------------------- Hadoop / S3A configs --------------------
+hconf = spark.sparkContext._jsc.hadoopConfiguration()
+hconf.set("fs.s3a.endpoint", MINIO_ENDPOINT)
+hconf.set("fs.s3a.path.style.access", "true")
+hconf.set("fs.s3a.connection.ssl.enabled", "false")
+hconf.set("fs.s3a.impl", "org.apache.hadoop.fs.s3a.S3AFileSystem")
+hconf.set("fs.s3a.access.key", MINIO_ACCESS_KEY)
+hconf.set("fs.s3a.secret.key", MINIO_SECRET_KEY)
+hconf.set("fs.s3a.aws.credentials.provider", "org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider")
+hconf.set("fs.s3a.fast.upload", "true")
+hconf.set("fs.s3a.committer.name", "magic")
+hconf.set("mapreduce.fileoutputcommitter.algorithm.version", "2")
+hconf.set("fs.s3a.disable.xml.external.entities", "true")  # <<-- Prevent SAXParseException
+hconf.set("fs.s3a.connection.timeout", "120000")
+hconf.set("fs.s3a.connection.establish.timeout", "120000")
+hconf.set("fs.s3a.attempts.maximum", "20")
+hconf.set("fs.s3a.connection.proxy.host", "")
+hconf.set("fs.s3a.connection.proxy.port", "")
+
+print("MinIO Hadoop S3A configuration set successfully.")
+
+# -------------------- Dummy Data --------------------
 dummy_raw_data = [
-    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a4"}, "couponCode": "CPN001", "status": "released"}),
-     int(datetime(2025, 8, 21, 10, 0, 0).timestamp() * 1000)),
-    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a5"}, "couponCode": "CPN002", "status": "released"}),
-     int(datetime(2025, 8, 21, 11, 30, 0).timestamp() * 1000)),
-    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a6"}, "couponCode": "CPN003", "status": "released"}),
-     int(datetime(2025, 8, 22, 14, 15, 0).timestamp() * 1000)),
-    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a4"}, "couponCode": "CPN001_UPDATED", "status": "cancelled"}),
-     int(datetime(2025, 8, 21, 12, 0, 0).timestamp() * 1000)),
+    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a4"}, "couponCode": "CPN001", "status": "released"}), int(datetime(2025, 8, 21, 10, 0, 0).timestamp() * 1000)),
+    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a5"}, "couponCode": "CPN002", "status": "released"}), int(datetime(2025, 8, 21, 11, 30, 0).timestamp() * 1000)),
+    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a6"}, "couponCode": "CPN003", "status": "released"}), int(datetime(2025, 8, 22, 14, 15, 0).timestamp() * 1000)),
+    (json.dumps({"_id": {"$oid": "60a7e2b7e9b0c2a0d1e2f3a4"}, "couponCode": "CPN001_UPDATED", "status": "cancelled"}), int(datetime(2025, 8, 21, 12, 0, 0).timestamp() * 1000)),
 ]
 
 raw_schema = StructType([
@@ -54,11 +70,9 @@ raw_schema = StructType([
 
 df_raw = spark.createDataFrame(dummy_raw_data, schema=raw_schema)
 
-# -------------------- 2. Transform for Hudi --------------------
+# -------------------- Transform for Hudi --------------------
 json_schema = StructType([
-    StructField("_id", StructType([
-        StructField("$oid", StringType(), True)
-    ]), True),
+    StructField("_id", StructType([StructField("$oid", StringType(), True)]), True),
     StructField("couponCode", StringType(), True),
     StructField("status", StringType(), True)
 ])
@@ -74,54 +88,39 @@ df_hudi_prep = df_parsed.select(
 ).withColumn("latitude", (rand() * 180) - 90) \
  .withColumn("longitude", (rand() * 360) - 180)
 
-
-print("Correctly Prepared DataFrame for Hudi:")
+print("Prepared DataFrame for Hudi:")
 df_hudi_prep.printSchema()
 df_hudi_prep.show(truncate=False)
 
-# -------------------- 3. Hudi Write Options --------------------
+# -------------------- Hudi Write Options --------------------
 hudi_options = {
     'hoodie.table.name': HUDI_TABLE_NAME,
     'hoodie.datasource.write.recordkey.field': 'oid',
     'hoodie.datasource.write.partitionpath.field': 'ts_date',
     'hoodie.datasource.write.precombine.field': 'ts_ms',
-    'hoodie.datasource.write.table.name': HUDI_TABLE_NAME,
     'hoodie.datasource.write.table.type': 'COPY_ON_WRITE',
-    'hoodie.datasource.write.operation': 'bulk_insert',
-    'hoodie.datasource.hive_sync.enable': 'false', # Keep this off for the test
-    'hoodie.metadata.enable': 'false',
-    'hoodie.consistency.check.enabled': 'true',
+    'hoodie.datasource.write.operation': 'upsert',
+    'hoodie.metadata.enable': 'true',
+    'hoodie.cleaner.policy': 'KEEP_LATEST_COMMITS',
+    'hoodie.cleaner.commits.retained': '3',
+    'hoodie.datasource.hive_sync.enable': 'false',
+    'hoodie.parquet.max.file.size': 134217728,
+    'hoodie.copyonwrite.record.size.estimate': 1024,
+    'hoodie.embed.timeline.server': 'false',
+    'hoodie.datasource.write.insert.shuffle.parallelism': 2,
+    'hoodie.datasource.write.upsert.shuffle.parallelism': 2,
 }
 
-# -------------------- 5. Write to Hudi --------------------
-print(f"Attempting a simplified bulk_insert to Hudi table '{HUDI_TABLE_NAME}' at '{HUDI_TABLE_PATH}'...")
-df_hudi_prep.write.format("hudi") \
-    .options(**hudi_options) \
-    .mode("overwrite")  \
-    .save(HUDI_TABLE_PATH)
-
-print("Simplified write completed!")
-spark.stop()
-# print("Write completed!")
-
-# # -------------------- 6. Refresh Hive and Verify --------------------
-# print("Reading back Hudi table data for verification...")
-# hudi_df = spark.read.format("hudi").load(HUDI_TABLE_PATH)
-# hudi_df.show()
-
-# print("Reading from Hive table...")
-
-# # Loop with retries is no longer strictly necessary with enableHiveSupport, but it's good practice
-# for i in range(5):
-#     try:
-#         spark.sql(f"REFRESH TABLE default.{HUDI_TABLE_NAME}")
-#         hive_df = spark.sql(f"SELECT oid, couponCode, status, ts_ms, ts_date, latitude, longitude FROM default.{HUDI_TABLE_NAME} ORDER BY oid, ts_ms")
-#         hive_df.show()
-#         break
-#     except AnalysisException as e:
-#         print(f"Attempt {i+1} failed: Table not found yet. Retrying in 10 seconds...")
-#         time.sleep(10)
-#         if i == 4:
-#             raise e
-
-# spark.stop()
+# -------------------- Write to Hudi --------------------
+try:
+    print(f"Attempting upsert to Hudi table '{HUDI_TABLE_NAME}' at '{HUDI_TABLE_PATH}'...")
+    df_hudi_prep.write.format("hudi") \
+        .options(**hudi_options) \
+        .mode("append") \
+        .save(HUDI_TABLE_PATH)
+    print("Hudi upsert completed successfully!")
+except Exception:
+    print("Hudi write FAILED. Full exception:")
+    traceback.print_exc()
+finally:
+    spark.stop()

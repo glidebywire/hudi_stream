@@ -3,13 +3,13 @@ from airflow.sdk import DAG
 from airflow.operators.bash import BashOperator
 
 with DAG(
-  dag_id="hudi_minio_ingest",
+  dag_id="minio_rw_test",
   start_date=datetime.datetime(2025, 7, 14),
   schedule="@once",
   catchup=False,
 ):
  bash_task = BashOperator(
-    task_id="hudi_minio_ingest",
+    task_id="minio_rw_test",
     bash_command="""
     spark-submit \
       --master spark://spark:7077 \
@@ -29,6 +29,6 @@ with DAG(
       --conf spark.kryo.registrator=org.apache.spark.HoodieSparkKryoRegistrar \
       --conf spark.speculation=false \
       --conf spark.hadoop.mapreduce.fileoutputcommitter.cleanup-failures.ignored=true \
-      /opt/airflow/jobs/jobs_readminio.py
+      /opt/airflow/jobs/jobs_minio_test.py
     """
 )
