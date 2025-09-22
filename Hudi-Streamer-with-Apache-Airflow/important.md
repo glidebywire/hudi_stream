@@ -3,9 +3,9 @@
 ## wget load those jars
 ```
 ls -h
-aws-java-sdk-bundle-1.12.262.jar  hudi-spark3.5-bundle_2.12-1.0.2.jar  woodstox-core-5.4.0.jar
+aws-java-sdk-bundle-1.12.262.jar  hudi-spark3.5-bundle_2.12-1.0.2.jar
 hadoop-aws-3.3.4.jar              postgresql-42.7.7.jar
-hadoop-common-3.3.4.jar           stax2-api-4.2.1.jar
+hadoop-common-3.3.4.jar          
 ```
 
 ## test metastore table init
@@ -27,16 +27,26 @@ WHERE table_schema = 'public'
 ORDER BY table_name;```
 ```
 
-on connection     Connection Name: Hive Metastore DB (or any name you like)
+docker exec -it trino trino --execute "SHOW CATALOGS;"
+docker exec -it trino trino --catalog hudi --execute "SHOW SCHEMAS;"
+docker exec -it trino trino --catalog hudi --schema default --execute "SHOW TABLES;"
 
-    Connection Method: Server and Port
+to enter interactive promprt :
+```
+docker exec -it trino trino --server trino:8080 --catalog hive --schema default
+```
+then :
 
-    Server Address: localhost
+```sql
+-- List tables in the default database
+SHOW TABLES;
 
-    Server Port: 5432
+-- Check your Hudi table
+DESCRIBE coupons_geo;
 
-    Database: metastore_db
+-- Query some data
+SELECT * FROM coupons_geo LIMIT 10;
 
-    Username: hive
-
-    Password: hive
+-- Count rows
+SELECT COUNT(*) FROM coupons_geo;
+```
