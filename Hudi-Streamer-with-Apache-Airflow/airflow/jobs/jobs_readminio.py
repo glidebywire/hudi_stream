@@ -132,4 +132,6 @@ for i in range(5):
         if i == 4:
             raise e
 
+print("Success writing and reading back to Hive! Exiting...")
+
 spark.stop()
